@@ -1,0 +1,7 @@
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: application-cert
+spec:
+  domains:
+    - techno.net.co

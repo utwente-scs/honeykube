@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: userdbservice
+spec:
+  selector:
+    matchLabels:
+      app: userdbservice
+  template:
+    metadata:
+      labels:
+        app: userdbservice
+    spec:
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 5
+      securityContext:
+        fsGroup: 3000
+      containers:
+      - name: userdb
+        image: userdbservice
+        ports:
+        - containerPort: 5000
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 3000
+          allowPrivilegeEscalation: false
+        resources:
+          limits:
+            memory: 128Mi
+            cpu: 100m
+        env:
+        - name: MYSQL_DB_SERVICE_ADDR
+          value: userdb
+        - name: MYSQL_DB_NAME
+          value: "userdb"
+        - name: MYSQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-username
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-password
+      - name: tcpdump
+        image: corfr/tcpdump
+        imagePullPolicy: Always
+        securityContext:
+          allowPrivilegeEscalation: false
+        volumeMounts:
+          - name: tcpdump-init
+            mountPath: /home/root/
+          - name: tcpdump-persistent-storage
+            mountPath: /tmp
+        command: ["/bin/sh", "-c"]
+        args:
+        - sh /home/root/start-tcpdump.sh userdbservice 360
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+      volumes:
+        - name: tcpdump-init
+          configMap:
+            name: tcpdump-script-configmap
+        - name: tcpdump-persistent-storage
+          persistentVolumeClaim:
+            claimName: userdbservice-tcpdump-pvc
+
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: userdbservice
+spec:
+  type: ClusterIP
+  selector:
+    app: userdbservice
+  ports:
+  - protocol: TCP
+    port: 5000
+    targetPort: 5000

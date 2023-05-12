@@ -1,0 +1,110 @@
+# Copyright 2018 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adservice
+spec:
+  selector:
+    matchLabels:
+      app: adservice
+  template:
+    metadata:
+      labels:
+        app: adservice
+    spec:
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 5
+      securityContext:
+        fsGroup: 3000
+      containers:
+      - name: server
+        image: eu.gcr.io/research-gcp-credits/adservice@sha256:147aa59685542387cf2b6b55c5d078dbf5268e88617c8667977681dec3d852bc
+        ports:
+        - containerPort: 9555
+        securityContext:
+          privileged: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 3000
+          allowPrivilegeEscalation: false
+        env:
+        - name: PORT
+          value: "9555"
+        - name: DISABLE_STATS
+          value: "1"
+        - name: DISABLE_TRACING
+          value: "1"
+        # - name: JAEGER_SERVICE_ADDR
+        #   value: "jaeger-collector:14268"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+          limits:
+            cpu: 200m
+            memory: 200Mi
+        readinessProbe:
+          initialDelaySeconds: 20
+          periodSeconds: 15
+          exec:
+            command: ["/bin/grpc_health_probe", "-addr=:9555"]
+        livenessProbe:
+          initialDelaySeconds: 20
+          periodSeconds: 15
+          exec:
+            command: ["/bin/grpc_health_probe", "-addr=:9555"]
+      - name: tcpdump
+        image: corfr/tcpdump
+        imagePullPolicy: Always
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+        volumeMounts:
+          - name: tcpdump-init
+            mountPath: /home/root/
+          - name: tcpdump-persistent-storage
+            mountPath: /tmp
+        command: ["/bin/sh", "-c"]
+        args:
+        - sh /home/root/start-tcpdump.sh adservice 900
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+          limits:
+            cpu: 200m
+            memory: 200Mi
+      volumes:
+        - name: tcpdump-init
+          configMap:
+            name: tcpdump-script-configmap
+        - name: tcpdump-persistent-storage
+          persistentVolumeClaim:
+            claimName: adservice-tcpdump-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: adservice
+spec:
+  type: ClusterIP
+  selector:
+    app: adservice
+  ports:
+  - name: grpc
+    port: 9555
+    targetPort: 9555

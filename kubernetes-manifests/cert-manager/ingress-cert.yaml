@@ -1,0 +1,37 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frontend-ingress
+  annotations:
+    # specify the name of the global IP address resource to be associated with the HTTP(S) Load Balancer.
+    kubernetes.io/ingress.global-static-ip-name: honeykube-static
+    # add an annotation indicating the issuer to use.
+    cert-manager.io/cluster-issuer: letsencrypt-cluster-issuer
+    # kubernetes.io/ingress.allow-http: "false"
+    # controls whether the ingress is modified ‘in-place’,
+    # or a new one is created specifically for the HTTP01 challenge.
+    acme.cert-manager.io/http01-edit-in-place: "true"
+    kubernetes.io/ingress.class: "gce"
+  labels:
+    app: frontend
+spec:   
+  tls: # < placing a host in the TLS config will indicate a certificate should be created
+  - hosts:
+    - techno.net.co
+    secretName: app-cert-secret # < cert-manager will store the created certificate in this secret
+  defaultBackend:
+    service:
+      name: frontend-external
+      port:
+        number: 443
+  rules:
+  - host: techno.net.co
+    http:
+      paths:
+      - path: /*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+              name: frontend-external
+              port:
+                number: 443

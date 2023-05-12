@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tcpdump-script-configmap
+data:
+  start-tcpdump.sh: |
+    #!/bin/bash
+
+    SERVICE=$1
+    TIMEOUT=$2
+    ARCHIVE_DIR=/tmp/archive
+
+    # Make directory
+    mkdir -p $ARCHIVE_DIR
+
+    while :
+    do
+
+        CURRENTDATE=`date +"%Y-%m-%d_%H-%M-%S"`
+        FILENAME=/tmp/${SERVICE}-${CURRENTDATE}.pcap
+        
+        timeout ${TIMEOUT} tcpdump -s 0 -n -w $FILENAME
+
+        mv $FILENAME $ARCHIVE_DIR
+
+    done
+
+  clear.sh: |
+    #!/bin/bash
+
+    ARCHIVE_DIR=/tmp/archive
+    
+    rm -f $ARCHIVE_DIR/*

@@ -1,0 +1,2 @@
+CREATE USER IF NOT EXISTS 'admin'@'localhost' IDENTIFIED BY 'admin123';
+CREATE USER IF NOT EXISTS 'admin'@'%' IDENTIFIED BY 'admin123';

@@ -1,0 +1,322 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: productdb-service
+spec:
+  ports:
+  - protocol: TCP
+    port: 3306
+    targetPort: 3306
+  selector:
+    app: mysql-productdb
+  type: ClusterIP
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: productdb
+  labels:
+    app: mysql-productdb
+spec:
+  replicas: 1
+  serviceName: productdb-service
+  selector:
+    matchLabels:
+      app: mysql-productdb
+  template:
+    metadata:
+      labels:
+        app: mysql-productdb
+    spec:
+      securityContext:
+        fsGroup: 3000
+      containers:
+      - name: mysql-productdb
+        image: mysql:8.0
+        imagePullPolicy: "IfNotPresent"
+        ports:
+          - containerPort: 3306
+        securityContext:
+          privileged: false
+          runAsNonRoot: true
+          runAsUser: 999
+          runAsGroup: 999
+          allowPrivilegeEscalation: false
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-root-password
+        - name: MYSQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-username
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-password
+        - name: MYSQL_DATABASE
+          value: "productcatalog"
+        volumeMounts:
+        - name: productdb-persistent-storage
+          mountPath: /var/lib/mysql
+        - name: productdb-init
+          mountPath: /docker-entrypoint-initdb.d
+        resources:
+          requests:
+            memory: 400Mi
+            cpu: 300m
+          limits:
+            memory: 500Mi
+            cpu: 500m
+      - name: tcpdump
+        image: corfr/tcpdump
+        imagePullPolicy: Always
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+        volumeMounts:
+          - name: tcpdump-init
+            mountPath: /home/root/
+          - name: tcpdump-persistent-storage
+            mountPath: /tmp
+        command: ["/bin/sh", "-c"]
+        args:
+        - sh /home/root/start-tcpdump.sh productdb 900
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+          limits:
+            cpu: 200m
+            memory: 200Mi
+      restartPolicy: Always
+      initContainers:
+      - name: init-productdb
+        image: alpine:3
+        command: ["/bin/sh", "-c"]
+        args:
+        - chown -R 999:999 /var/lib/mysql
+        volumeMounts:
+        - name: productdb-persistent-storage
+          mountPath: /var/lib/mysql
+      volumes:
+      - name: productdb-persistent-storage
+        persistentVolumeClaim:
+          claimName: productdb-pv-claim
+      - name: productdb-init
+        configMap:
+          name: productdb-init-config
+      - name: tcpdump-init
+        configMap:
+          name: tcpdump-script-configmap
+      - name: tcpdump-persistent-storage
+        persistentVolumeClaim:
+          claimName: productdb-tcpdump-pvc
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: productdb-init-config
+data:
+  initdb.sql: |
+    CREATE TABLE IF NOT EXISTS products
+    (
+      id varchar(100) NOT NULL,
+      name varchar (200) NOT NULL,
+      description text,
+      img_path varchar(200),
+      currency_code varchar(10),
+      units int,
+      nanos int,
+      categories varchar(500),
+      PRIMARY KEY(id)
+    );
+  populate.sql: |
+    INSERT INTO products VALUES
+    (
+        "OLJCESPC7Z",
+        "SAMSUNG Galaxy A51 - 128 GB Dual-sim Blue",
+        "The Samsung Galaxy A51 is equipped with a Full HD + Infinity-O Display of 6.5 inches, which, thanks to Super AMOLED technology, has extra sharp contrasts and color reproduction. This is very nice if you want to show your latest snapshots to your friends.",
+        "/static/img/products/samsung1.jpeg",
+        "EUR",
+        277,
+        990000000,
+        "smartphone"
+    );
+
+    INSERT INTO products VALUES
+    (
+        "66VCHSJNUP",
+        "SAMSUNG Galaxy A20e - 32 GB Dual SIM Black",
+        "The Samsung Galaxy A20e is a device that will amaze you. The device is stylishly designed by the symmetrically finished curves, which ensures that the Galaxy A20e is very comfortable in the hand. The 5.8 inch Infinity V display is recessed in the housing.",
+        "/static/img/products/samsung2.jpeg",
+        "EUR",
+        165,
+        490000000,
+        "smartphone"
+    );
+
+    INSERT INTO products VALUES
+    (
+        "1YMWWN1N4O",
+        "APPLE iPhone 11 - 64 GB Black",
+        "With the iPhone 11, Apple continues the well-known iPhone series. Again, this smartphone is equipped with a Liquid Retina edge-to-edge screen and the screen size is 6.1 inches. At the top you will find the renewed front camera with 12 megapixels.",
+        "/static/img/products/apple1.jpeg",
+        "EUR",
+        710,
+        0,
+        "smartphone"
+    );
+
+    INSERT INTO products VALUES
+    (
+        "L9ECAV7KIM",
+        "SAMSUNG Galaxy A71 - 128 GB Dual SIM Black",
+        "The Samsung Galaxy A71 immediately stands out with its 6.7-inch bezel-less Infinity-O Display, allowing the Full HD + display with Super AMOLED technology to produce clear contrasts. Very pleasant while gaming or watching movies and series.",
+        "/static/img/products/samsung3.jpeg",
+        "EUR",
+        299,
+        450000000,
+        "smartphone"
+    );
+
+    INSERT INTO products VALUES
+    (
+        "2ZYFJ3GM2N",
+        "MOTOROLA Moto E6 Play - 32 GB Dual-sim Black",
+        "The Motorola Moto E6 Play ensures that you decide when it is time for entertainment. That starts with the security of your device. You can unlock the Moto E6 Play in the blink of an eye with the facial recognizer or with a simple touch on the fingerprint sensor.",
+        "/static/img/products/moto1.jpeg",
+        "EUR",
+        99,
+        0,
+        "smartphone"
+    );
+
+    INSERT INTO products VALUES
+    (
+        "0PUK6V6EV0",
+        "XIAOMI Poco X3 - 128 GB Gray",
+        "A smart smartphone with a slim design: the OPPO A15 (2020). The first notable feature of this smartphone is the triple camera with artificial intelligence and 3 types of lenses: a main, macro and depth lens. It is therefore easy for this device to take a good photo or video from both close and far.",
+        "/static/img/products/xiomi1.jpeg",
+        "EUR",
+        259,
+        500000000,
+        "smartphone"
+    );
+
+    INSERT INTO products VALUES
+    (
+        "LS4PSXUNUM",
+        "OPPO A15 - 32 GB Blue",
+        "A smart smartphone with a slim design: the OPPO A15 (2020). The first notable feature of this smartphone is the triple camera with artificial intelligence and 3 types of lenses: a main, macro and depth lens. It is therefore easy for this device to take a good photo or video from both close and far.",
+        "/static/img/products/oppo1.jpeg",
+        "EUR",
+        124,
+        330000000,
+        "smartphone"
+    );
+
+    INSERT INTO products VALUES
+    (
+        "9SIQT8TOJO",
+        "APPLE iPhone 12 Pro Max - 256 GB Ocean Blue 5G",
+        "With the iPhone 12 Pro Max, Apple is setting a new standard when it comes to speed and innovation. This is the first iPhone that is compatible with the 5G network. This way you are always available and you have all the information on your display in the blink of an eye. That has also undergone a metamorphosis, because it is equipped with a Super Retina XDR display with OLED image quality and Ceramic Shield.",
+        "/static/img/products/apple2.jpeg",
+        "EUR",
+        1261,
+        500000000,
+        "smartphone"
+    );
+
+    INSERT INTO products VALUES
+    (
+        "8G92ZMYYFZ",
+        "SAMSUNG Galaxy A52 - 128 GB Black",
+        "The Samsung Galaxy A52 (4G) is a beautifully designed smartphone that also has a lot to offer. For example, you can watch videos in Full HD + quality on the 6.5-inch Infinity-O display, which displays smooth and clear images thanks to the 90 Hz refresh rate and Super AMOLED technology.",
+        "/static/img/products/samsung5.jpeg",
+        "EUR",
+        329,
+        300000000,
+        "smartphone"
+    );
+
+    INSERT INTO products VALUES
+    (
+        "1P92ZMY6FP",
+        "GARMIN vivoactive 4S White / Rose gold",
+        "The Garmin vivoactive 4S is your coach in daily life and during sports. With this smart sports watch, you can listen to music without connecting to your phone and pay for your groceries contactlessly. In addition, the vivoactive 4S is equipped with a built-in heart rate sensor, GPS and is water resistant. ",
+        "/static/img/products/garmin1.jpeg",
+        "EUR",
+        286,
+        300000000,
+        "smartwatch"
+    );
+
+    INSERT INTO products VALUES
+    (
+        "0ELLZMYPLG",
+        "SAMSUNG Galaxy Watch 3 Steel Silver",
+        "The Samsung Galaxy Watch3 has the look of a classic watch with innovative possibilities. The Watch3 is even thinner, smaller and lighter than its predecessor, but despite all this has a larger display, namely 1.2 inches.",
+        "/static/img/products/samsung_watch1.jpeg",
+        "EUR",
+        269,
+        300000000,
+        "smartwatch"
+    );
+
+    INSERT INTO products VALUES
+    (
+        "2YHTMY6LO",
+        "GARMIN vivoactive 4S PVD Black / stainless steel",
+        "The Garmin vivoactive 4S is your coach in daily life and during sports. With this smart sports watch, you can listen to music without connecting to your phone and pay for your groceries contactlessly. The vivoactive 4S is equipped with a built-in heart rate sensor, GPS and is water resistant.",
+        "/static/img/products/garmin2.jpeg",
+        "EUR",
+        268,
+        300000000,
+        "smartwatch"
+    );
+
+    INSERT INTO products VALUES
+    (
+        "89J2ZMU6KL",
+        "HUAWEI Watch GT 2E Sport Black",
+        "The sporty Huawei Watch GT 2nd Sport is a real endurance runner that monitors your health. This water-resistant smartwatch offers more, because you now have a battery that lasts at least two weeks on a charge. The display has also become even larger, namely 1.39 inch, so that you can see even better who apps and calls you, but also how you perform.",
+        "/static/img/products/huawei1.jpeg",
+        "EUR",
+        144,
+        300000000,
+        "smartwatch"
+    );
+
+    INSERT INTO products VALUES
+    (
+        "9IK2ZMUSD1",
+        "GARMIN Venu Sq Gray / Gray",
+        "The Garming Venu Sq is a smart sports watch that motivates you to keep moving. This stylish watch is equipped with a clear touch display that allows you to navigate through your notifications, the various sports apps and your favorite music. You use the Venu Sq as a sports buddy to keep track of your fitness and health during your running round or other workout, but also in daily life.",
+        "/static/img/products/garmin3.jpeg",
+        "EUR",
+        199,
+        300000000,
+        "smartwatch"
+    );
+
+    INSERT INTO products VALUES
+    (
+        "3ILZ5WE8Y",
+        "SAMSUNG Galaxy Watch Active2 Sport Silver",
+        "With the Galaxy Watch Active2 you get a stylish watch with a personal trainer. The watch is made of lightweight aluminum and hardened Gorilla Glass against scratches.",
+        "/static/img/products/samsung_watch2.jpeg",
+        "EUR",
+        197,
+        300000000,
+        "smartwatch"
+    );
+
