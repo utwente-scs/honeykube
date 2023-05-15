@@ -50,3 +50,6 @@ sudo ./scripts/deploy_local.sh
 ```
 sudo ./scripts/deploy_gke.sh {HOME_DIR}
 ```
+
+
+Send an email to c.gupta@utwente.nl to get access to the data collected by our experiment.
